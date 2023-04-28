@@ -1,0 +1,178 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI;
+
+public class AIController : MonoBehaviour
+{
+    private NavMeshAgent agent;
+    private SphereCollider checkRange;
+    private Animator Animator;
+
+    private int destinationPoint = 0;
+    private bool seenPlayer, isMoving, isAttacking, didAttack;
+    private float fieldOfView = 110f;
+    private float angle;
+    public WaveSystem isDead;
+
+    [SerializeField] private GameObject player;
+    [SerializeField] private Transform[] waypoints;
+    [SerializeField] private Collider handCollider;
+    [SerializeField] int health = 5;
+
+    void Start()
+    {
+        //Time.timeScale = 0.2f;
+        agent = GetComponent<NavMeshAgent>();
+        checkRange = GetComponent<SphereCollider>();
+        Animator = GetComponentInChildren<Animator>();
+        handCollider.enabled = false;
+
+        agent.speed = 1.5f;
+        agent.angularSpeed = 200f;
+        agent.stoppingDistance = 1f;
+
+        GoToNextPoint();
+    }
+
+
+    void Update()
+    {
+        MoveAI();
+        UpdateAnimation();
+    }
+
+    public void TakeDamage(int damageAmount)
+    {
+        health -= damageAmount;
+
+        if(health <= 0)
+        {
+            Destroy(gameObject);
+            isDead.enemiesAlive--;
+        }
+    }
+
+    void GoToNextPoint()
+    {
+        destinationPoint = Random.Range(0, waypoints.Length);
+
+        agent.destination = waypoints[destinationPoint].position;
+    }
+    void MoveAI()
+    {
+        if (seenPlayer)
+        {
+            agent.stoppingDistance = 3.5f;
+            agent.speed = 6f;
+            agent.SetDestination(player.transform.position);
+
+            if (!agent.pathPending && agent.remainingDistance < agent.stoppingDistance)
+            {
+                if (!didAttack)
+                {
+                    StartCoroutine(Punch());
+                    StartCoroutine(ColliderState());
+                }
+            }
+            else
+            {
+                agent.speed = 6f;
+            }
+        }
+        else
+        {
+            agent.speed = 1.6f;
+            agent.stoppingDistance = 1f;
+
+            if (!agent.pathPending && agent.remainingDistance < agent.stoppingDistance)
+            {
+                StartCoroutine(Wait(2f));
+                if (!isMoving)
+                {
+                    GoToNextPoint();
+                }
+            }
+            else
+            {
+                isMoving = true;
+            }
+        }
+    }
+    void UpdateAnimation()
+    {
+        Animator.SetFloat("Speed", agent.velocity.sqrMagnitude / agent.speed);
+        Animator.SetBool("IsAttacking", isAttacking);
+    }
+
+    void OnTriggerStay(Collider other)
+    {
+        if (other.gameObject.CompareTag("Player"))
+        {
+            Vector3 direction = (other.transform.position - transform.position).normalized;
+            angle = Vector3.Angle(direction, transform.forward);
+
+            if (angle < (fieldOfView * 0.5f))
+            {
+                if (Physics.Linecast(transform.position + Vector3.up * 1.6f, other.transform.position, out RaycastHit hit))
+                {
+                    if (hit.collider.CompareTag("Player"))
+                    {
+                        seenPlayer = true;
+                        isAttacking = true;
+                    }
+                    else
+                    {
+                        seenPlayer = false;
+                        isAttacking = false;
+                    }
+                }
+                else
+                {
+                    seenPlayer = false;
+                    isAttacking= false;
+                }
+            }
+            else
+            {
+                seenPlayer = false;
+                isAttacking = false;
+            }
+        }
+        IEnumerator Wait(float time)
+        {
+            yield return new WaitForSeconds(time);
+            isMoving = false;
+        }
+
+
+    }
+
+
+    IEnumerator Wait(float time)
+    {
+        yield return new WaitForSeconds(time);
+        isMoving = false;
+    }
+
+    IEnumerator Punch()
+    {
+        didAttack = true;
+        agent.isStopped = true;
+        Animator.SetTrigger("IsPunching");
+        yield return new WaitForSeconds(2.67f);
+        Animator.ResetTrigger("IsPunching");
+        agent.isStopped = false;
+        didAttack = false;
+    }
+
+    IEnumerator ColliderState()
+    {
+        yield return new WaitForSeconds(1.08f);
+        handCollider.enabled = true;
+        yield return new WaitForSeconds(1.12f);
+        handCollider.enabled = false;
+    }
+
+
+}
